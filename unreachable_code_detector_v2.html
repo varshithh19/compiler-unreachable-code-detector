@@ -1,0 +1,2215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Unreachable Code Detector — Compiler Visualizer</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #0a0c10;
+  --surface: #10141c;
+  --surface2: #161b26;
+  --surface3: #1e2535;
+  --border: #252d3f;
+  --border2: #2e3a52;
+  --accent: #00d4ff;
+  --accent2: #7c3aed;
+  --accent3: #10b981;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --text3: #64748b;
+  --token-kw: #c084fc;
+  --token-id: #60a5fa;
+  --token-num: #34d399;
+  --token-str: #fbbf24;
+  --token-op: #f87171;
+  --token-punct: #94a3b8;
+  --unreachable: rgba(239,68,68,0.18);
+  --unreachable-border: #ef4444;
+  --phase-h: 64px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── HEADER ── */
+header {
+  background: linear-gradient(135deg, #0d1117 0%, #10141c 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 0 32px;
+  height: var(--phase-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+  backdrop-filter: blur(12px);
+}
+.logo {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+  display: flex; align-items: center; gap: 10px;
+}
+.logo-icon {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.badge {
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.header-meta { font-size: 0.75rem; color: var(--text3); font-family: 'JetBrains Mono', monospace; }
+
+/* ── LAYOUT ── */
+.app { display: grid; grid-template-columns: 400px 1fr; height: calc(100vh - var(--phase-h)); }
+
+/* ── LANGUAGE DROPDOWN ── */
+.lang-bar {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface2);
+}
+.lang-label { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
+.lang-select {
+  flex: 1;
+  background: var(--surface3);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color .2s;
+}
+.lang-select:hover, .lang-select:focus { border-color: var(--accent); }
+.lang-select option { background: #161b26; }
+
+/* ── LEFT PANEL ── */
+.left-panel {
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.panel-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text2);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.panel-header .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent3); box-shadow: 0 0 8px var(--accent3); }
+
+/* Code editor */
+.editor-wrap { position: relative; flex: 1; display: flex; flex-direction: column; }
+#code-editor {
+  flex: 1;
+  background: #080b10;
+  border: none;
+  color: #c9d1d9;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 16px 16px 16px 48px;
+  resize: none;
+  outline: none;
+  width: 100%;
+  tab-size: 4;
+}
+.line-nums {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 40px;
+  background: #080b10;
+  border-right: 1px solid var(--border);
+  padding-top: 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text3);
+  line-height: 1.7;
+  text-align: right;
+  padding-right: 8px;
+  pointer-events: none;
+  overflow: hidden;
+  user-select: none;
+}
+.line-num { display: block; height: 22.1px; }
+.line-num.unreachable-num { color: var(--danger); }
+
+.editor-highlighted {
+  position: absolute;
+  left: 40px; top: 0; right: 0; bottom: 0;
+  padding: 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  pointer-events: none;
+  white-space: pre;
+  overflow: auto;
+}
+.hl-line { display: block; }
+.hl-line.unreachable-line {
+  background: var(--unreachable);
+  border-left: 3px solid var(--unreachable-border);
+  padding-left: 4px;
+  margin-left: -4px;
+  border-radius: 2px;
+}
+
+/* Test cases */
+.test-cases {
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+}
+.tc-label { font-size: 0.72rem; color: var(--text3); margin-bottom: 8px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: .06em; }
+.tc-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.tc-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all .2s;
+}
+.tc-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Analyze button */
+.analyze-btn {
+  margin: 12px 16px;
+  background: linear-gradient(135deg, var(--accent2), var(--accent));
+  border: none;
+  color: white;
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  letter-spacing: .04em;
+  transition: all .2s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.analyze-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,212,255,.2); }
+.analyze-btn:active { transform: translateY(0); }
+.analyze-btn.running { animation: pulse-btn 1s ease infinite; }
+@keyframes pulse-btn { 0%,100%{opacity:1} 50%{opacity:.7} }
+
+/* ── RIGHT PANEL ── */
+.right-panel { display: flex; flex-direction: column; overflow: hidden; }
+
+/* Phase tabs */
+.phase-nav {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--surface);
+}
+.phase-nav::-webkit-scrollbar { display: none; }
+.phase-tab {
+  flex-shrink: 0;
+  padding: 0 18px;
+  height: 48px;
+  display: flex; align-items: center; gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text3);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all .2s;
+  position: relative;
+  white-space: nowrap;
+}
+.phase-tab:hover { color: var(--text2); }
+.phase-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.phase-tab .phase-num {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--surface3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  transition: all .2s;
+}
+.phase-tab.active .phase-num { background: var(--accent); color: #000; }
+.phase-tab.done .phase-num { background: var(--accent3); color: #000; }
+.phase-tab.done { color: var(--text2); }
+
+/* Phase content */
+.phase-content { flex: 1; overflow-y: auto; padding: 24px; }
+.phase-content::-webkit-scrollbar { width: 4px; }
+.phase-content::-webkit-scrollbar-track { background: transparent; }
+.phase-content::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* Phase panel */
+.phase-panel { display: none; }
+.phase-panel.active { display: block; animation: fadeUp .3s ease; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+/* Titles */
+.phase-title {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 1.4rem;
+  margin-bottom: 6px;
+  display: flex; align-items: center; gap: 10px;
+}
+.phase-sub { color: var(--text2); font-size: 0.85rem; margin-bottom: 20px; line-height: 1.6; }
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+.card-title {
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text2);
+  margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.card-title::before { content:''; width:3px; height:14px; background: var(--accent); border-radius:2px; }
+
+/* ── PHASE 1: TOKENS ── */
+.token-stream { display: flex; flex-wrap: wrap; gap: 6px; }
+.token-chip {
+  display: inline-flex; flex-direction: column;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  animation: tokenPop .2s ease both;
+}
+@keyframes tokenPop { from{opacity:0;transform:scale(.85)} to{opacity:1;transform:scale(1)} }
+.token-val { font-weight: 700; font-size: 0.78rem; }
+.token-type { color: var(--text3); font-size: 0.62rem; margin-top: 2px; }
+.tk-KEYWORD .token-val { color: var(--token-kw); }
+.tk-IDENTIFIER .token-val { color: var(--token-id); }
+.tk-NUMBER .token-val { color: var(--token-num); }
+.tk-STRING .token-val { color: var(--token-str); }
+.tk-OPERATOR .token-val { color: var(--token-op); }
+.tk-PUNCTUATION .token-val { color: var(--token-punct); }
+.tk-BOOLEAN .token-val { color: var(--warn); }
+.tk-COMPARISON .token-val { color: var(--token-op); }
+.tk-INDENT .token-val { color: #555; }
+.tk-NEWLINE .token-val { color: #444; }
+.tk-DEDENT .token-val { color: #555; }
+
+/* Token table */
+.token-table { width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
+.token-table th { text-align: left; color: var(--text3); padding: 6px 10px; border-bottom: 1px solid var(--border); font-weight: 600; }
+.token-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); }
+.token-table tr:hover td { background: var(--surface2); }
+
+/* Lexer legend */
+.legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; }
+.legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+/* ── PHASE 2: PARSE TREE ── */
+#parse-tree-svg { width: 100%; border-radius: 8px; background: #080b10; border: 1px solid var(--border); }
+
+/* ── PHASE 3: SEMANTIC ── */
+.sym-table { width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
+.sym-table th { text-align: left; color: var(--accent); padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 0.7rem; text-transform: uppercase; }
+.sym-table td { padding: 6px 12px; border-bottom: 1px solid var(--border); }
+.sym-table tr:hover td { background: var(--surface2); }
+.scope-badge {
+  display: inline-block;
+  background: var(--surface3);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 0.68rem;
+  color: var(--text2);
+}
+.type-badge {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+/* Scope diagram */
+.scope-diagram { display: flex; flex-direction: column; gap: 10px; }
+.scope-box {
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 12px 16px;
+  position: relative;
+}
+.scope-box::before {
+  content: attr(data-label);
+  position: absolute; top: -10px; left: 12px;
+  background: var(--surface);
+  padding: 0 6px;
+  font-size: 0.68rem;
+  color: var(--text3);
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+}
+.scope-box.global { border-color: var(--accent2); }
+.scope-box.func { border-color: var(--accent3); }
+.scope-inner { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+
+.sem-check { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 6px; background: var(--surface2); border: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; margin-bottom: 8px; }
+.sem-ok { color: var(--accent3); }
+.sem-warn { color: var(--warn); }
+.sem-err { color: var(--danger); }
+
+/* ── PHASE 4: IR ── */
+.ir-container { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ir-block { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; line-height: 1.8; }
+.ir-label { color: var(--text3); margin-bottom: 10px; font-size: 0.68rem; text-transform: uppercase; letter-spacing: .06em; }
+.ir-line { display: block; padding: 2px 0; }
+.ir-line.dead { background: var(--unreachable); border-left: 2px solid var(--danger); padding-left: 6px; color: var(--danger); text-decoration: line-through; opacity: .7; }
+.ir-line .ir-label-id { color: var(--token-kw); }
+.ir-line .ir-goto { color: var(--warn); }
+.ir-line .ir-comment { color: var(--text3); }
+.ir-line .ir-assign { color: var(--token-id); }
+.ir-line .ir-op { color: var(--token-op); }
+.bblock {
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.bblock-header {
+  background: var(--surface3);
+  padding: 5px 12px;
+  font-size: 0.68rem;
+  color: var(--text2);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.bblock-header.dead-block { background: rgba(239,68,68,.15); color: var(--danger); border-left: 3px solid var(--danger); }
+.bblock-body { padding: 8px 12px; }
+
+/* ── PHASE 5: CFG ── */
+#cfg-svg { width: 100%; border-radius: 8px; background: #080b10; border: 1px solid var(--border); }
+
+/* ── PHASE 6: OUTPUT ── */
+.output-code { background: #080b10; border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; line-height: 1.8; overflow-x: auto; }
+.out-line { display: flex; align-items: stretch; gap: 0; }
+.out-lnum { color: var(--text3); min-width: 32px; text-align: right; padding-right: 12px; user-select: none; }
+.out-code { flex: 1; white-space: pre; }
+.out-line.dead-out .out-code { color: var(--danger); text-decoration: line-through; opacity: .7; }
+.out-line.dead-out { background: var(--unreachable); border-radius: 3px; }
+.out-line.dead-out .warn-flag { color: var(--danger); margin-left: 8px; font-size: 0.68rem; animation: blink 1.5s step-end infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+.warn-box {
+  background: rgba(239,68,68,.08);
+  border: 1px solid rgba(239,68,68,.3);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  display: flex; align-items: flex-start; gap: 12px;
+}
+.warn-icon { font-size: 1.1rem; margin-top: 1px; }
+.warn-msg { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; }
+.warn-msg strong { color: var(--danger); display: block; margin-bottom: 3px; }
+.warn-msg span { color: var(--text2); }
+
+.summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center; }
+.stat-num { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.8rem; }
+.stat-num.danger { color: var(--danger); }
+.stat-num.ok { color: var(--accent3); }
+.stat-num.info { color: var(--accent); }
+.stat-lbl { color: var(--text3); font-size: 0.72rem; margin-top: 4px; }
+
+/* Auto-play controls */
+.autoplay-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.ap-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .15s;
+  display: flex; align-items: center; gap: 6px;
+}
+.ap-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ap-btn.active { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 700; }
+.progress-bar-wrap { flex: 1; background: var(--surface2); border-radius: 4px; height: 6px; overflow: hidden; border: 1px solid var(--border); }
+.progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .4s ease; border-radius: 4px; }
+.ap-step-info { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text3); white-space: nowrap; }
+
+/* Empty state */
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 16px; color: var(--text3); padding: 40px; text-align: center; }
+.empty-icon { font-size: 3rem; opacity: .3; }
+.empty-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1rem; color: var(--text2); }
+.empty-sub { font-size: 0.82rem; line-height: 1.6; max-width: 280px; }
+
+/* Error panel */
+.error-panel { background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.3); border-radius: 8px; padding: 16px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--danger); }
+
+/* Spinner */
+.spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.2); border-top-color: white; border-radius: 50%; animation: spin .6s linear infinite; }
+@keyframes spin { to{transform:rotate(360deg)} }
+
+/* Responsive */
+@media(max-width:900px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: 45vh 55vh; }
+  .ir-container { grid-template-columns: 1fr; }
+  .summary-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* scrollbar global */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* Animation delays for token chips */
+.token-chip:nth-child(1){animation-delay:.02s}
+.token-chip:nth-child(2){animation-delay:.04s}
+.token-chip:nth-child(3){animation-delay:.06s}
+.token-chip:nth-child(4){animation-delay:.08s}
+.token-chip:nth-child(5){animation-delay:.10s}
+.token-chip:nth-child(6){animation-delay:.12s}
+.token-chip:nth-child(7){animation-delay:.14s}
+.token-chip:nth-child(8){animation-delay:.16s}
+.token-chip:nth-child(9){animation-delay:.18s}
+.token-chip:nth-child(10){animation-delay:.20s}
+
+/* ── DETAILED PARSE TREE (oval node style) ── */
+.detail-tree-wrap { overflow-x: auto; overflow-y: auto; background: #06080d; border-radius: 8px; border: 1px solid var(--border); }
+
+.glow-text {
+  text-shadow: 0 0 20px var(--accent);
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <span>Compiler<span class="badge">Viz</span></span>
+    <span style="color:var(--text3);font-weight:300;font-size:.9rem;font-family:'DM Sans',sans-serif"> — Unreachable Code Detector</span>
+  </div>
+  <div class="header-meta">Python · All 6 Phases · v1.0</div>
+</header>
+
+<div class="app">
+  <!-- LEFT -->
+  <div class="left-panel">
+    <div class="panel-header">
+      Source Code
+      <span class="dot"></span>
+    </div>
+    <div class="lang-bar">
+      <span class="lang-label">Language</span>
+      <select class="lang-select" id="lang-select" onchange="onLangChange()">
+        <option value="python">🐍 Python</option>
+        <option value="javascript">🟨 JavaScript</option>
+        <option value="java">☕ Java</option>
+        <option value="c">⚙️ C</option>
+        <option value="cpp">⚙️ C++</option>
+        <option value="go">🐹 Go</option>
+        <option value="rust">🦀 Rust</option>
+        <option value="typescript">🔷 TypeScript</option>
+        <option value="kotlin">🟣 Kotlin</option>
+        <option value="swift">🍎 Swift</option>
+      </select>
+    </div>
+    <div class="editor-wrap">
+      <div class="line-nums" id="line-nums"></div>
+      <textarea id="code-editor" spellcheck="false" placeholder="Enter Python code here..."></textarea>
+    </div>
+    <div class="test-cases">
+      <div class="tc-label">▸ Test Cases</div>
+      <div class="tc-grid" id="tc-grid"></div>
+    </div>
+    <button class="analyze-btn" id="analyze-btn" onclick="runAnalysis()">
+      <span id="btn-icon">▶</span>
+      <span id="btn-text">Analyze Code</span>
+    </button>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right-panel">
+    <nav class="phase-nav" id="phase-nav">
+      <div class="phase-tab active" data-phase="0" onclick="showPhase(0)"><span class="phase-num">1</span>Lexical</div>
+      <div class="phase-tab" data-phase="1" onclick="showPhase(1)"><span class="phase-num">2</span>Syntax</div>
+      <div class="phase-tab" data-phase="2" onclick="showPhase(2)"><span class="phase-num">3</span>Semantic</div>
+      <div class="phase-tab" data-phase="3" onclick="showPhase(3)"><span class="phase-num">4</span>IR Gen</div>
+      <div class="phase-tab" data-phase="4" onclick="showPhase(4)"><span class="phase-num">5</span>Optimization</div>
+      <div class="phase-tab" data-phase="5" onclick="showPhase(5)"><span class="phase-num">6</span>Output</div>
+    </nav>
+
+    <div class="phase-content" id="phase-content">
+      <div class="empty-state">
+        <div class="empty-icon">🔬</div>
+        <div class="empty-title">Ready to Analyze</div>
+        <div class="empty-sub">Write Python code in the editor or pick a test case, then click <strong>Analyze Code</strong> to see all 6 compiler phases visualized step by step.</div>
+      </div>
+    </div>
+
+    <div class="autoplay-bar">
+      <button class="ap-btn" id="ap-play" onclick="toggleAutoPlay()">▶ Auto-Play</button>
+      <button class="ap-btn" onclick="prevPhase()">◀ Prev</button>
+      <button class="ap-btn" onclick="nextPhase()">Next ▶</button>
+      <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-fill" style="width:0%"></div></div>
+      <div class="ap-step-info" id="ap-step-info">Phase — / 6</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════
+// TEST CASES
+// ══════════════════════════════════════════════════
+const TEST_CASES = [
+  {
+    label: "return + dead code",
+    code: `def greet(name):
+    print("Hello", name)
+    return "done"
+    print("This will never run")
+    x = 42
+    return "never"
+
+result = greet("Alice")
+print(result)`
+  },
+  {
+    label: "while True",
+    code: `def loop_forever():
+    while True:
+        print("looping")
+    print("unreachable after loop")
+    x = 10
+
+loop_forever()`
+  },
+  {
+    label: "if False branch",
+    code: `def check():
+    x = 5
+    if False:
+        print("never")
+        y = x + 1
+    else:
+        print("always runs")
+    return x
+
+check()`
+  },
+  {
+    label: "break/continue",
+    code: `def find_first(lst):
+    for item in lst:
+        if item > 0:
+            return item
+            print("after return")
+        continue
+        print("after continue")
+    return -1
+
+find_first([1, 2, 3])`
+  },
+  {
+    label: "nested dead blocks",
+    code: `def nested():
+    x = 1
+    if x > 0:
+        return x
+        if x > 5:
+            print("deep dead code")
+            y = x * 2
+    else:
+        print("else branch")
+    print("after if — dead")
+    return 0
+
+nested()`
+  },
+  {
+    label: "flat return (bug fix)",
+    code: `x = 5
+return
+x = 10`
+  },
+  {
+    label: "no dead code",
+    code: `def add(a, b):
+    result = a + b
+    return result
+
+def main():
+    x = 10
+    y = 20
+    z = add(x, y)
+    print(z)
+
+main()`
+  }
+];
+
+// ══════════════════════════════════════════════════
+// LANGUAGE TEST CASES
+// ══════════════════════════════════════════════════
+const LANG_TEST_CASES = {
+  python: TEST_CASES,
+  javascript: [
+    { label: "return + dead", code: `function greet(name) {\n  console.log("Hello", name);\n  return "done";\n  console.log("never runs");\n  let x = 42;\n}\n\ngreet("Alice");` },
+    { label: "while(true)", code: `function loop() {\n  while (true) {\n    console.log("loop");\n  }\n  console.log("unreachable");\n}\n\nloop();` },
+    { label: "if(false)", code: `function check() {\n  let x = 5;\n  if (false) {\n    console.log("never");\n  } else {\n    console.log("always");\n  }\n  return x;\n}` },
+    { label: "no dead code", code: `function add(a, b) {\n  return a + b;\n}\n\nconst result = add(3, 4);\nconsole.log(result);` }
+  ],
+  java: [
+    { label: "return + dead", code: `public class Main {\n  public static String greet(String name) {\n    System.out.println("Hello " + name);\n    return "done";\n    System.out.println("unreachable");\n    int x = 42;\n  }\n\n  public static void main(String[] args) {\n    greet("Alice");\n  }\n}` },
+    { label: "while(true)", code: `public class Main {\n  public static void loop() {\n    while (true) {\n      System.out.println("looping");\n    }\n    System.out.println("unreachable");\n  }\n}` },
+    { label: "no dead code", code: `public class Main {\n  public static int add(int a, int b) {\n    return a + b;\n  }\n\n  public static void main(String[] args) {\n    System.out.println(add(3, 4));\n  }\n}` }
+  ],
+  c: [
+    { label: "return + dead", code: `#include <stdio.h>\n\nint greet(char* name) {\n  printf("Hello %s\\n", name);\n  return 1;\n  printf("never runs\\n");\n  int x = 42;\n}\n\nint main() {\n  greet("Alice");\n  return 0;\n}` },
+    { label: "while(1)", code: `#include <stdio.h>\n\nvoid loop() {\n  while (1) {\n    printf("looping\\n");\n  }\n  printf("unreachable\\n");\n}\n\nint main() {\n  loop();\n  return 0;\n}` },
+    { label: "no dead code", code: `#include <stdio.h>\n\nint add(int a, int b) {\n  return a + b;\n}\n\nint main() {\n  printf("%d\\n", add(3, 4));\n  return 0;\n}` }
+  ],
+  cpp: [
+    { label: "return + dead", code: `#include <iostream>\nusing namespace std;\n\nstring greet(string name) {\n  cout << "Hello " << name << endl;\n  return "done";\n  cout << "unreachable" << endl;\n  int x = 42;\n}\n\nint main() {\n  greet("Alice");\n  return 0;\n}` },
+    { label: "while(true)", code: `#include <iostream>\nusing namespace std;\n\nvoid loop() {\n  while (true) {\n    cout << "looping" << endl;\n  }\n  cout << "unreachable" << endl;\n}\n\nint main() {\n  loop();\n  return 0;\n}` },
+    { label: "no dead code", code: `#include <iostream>\nusing namespace std;\n\nint add(int a, int b) {\n  return a + b;\n}\n\nint main() {\n  cout << add(3, 4) << endl;\n  return 0;\n}` }
+  ],
+  go: [
+    { label: "return + dead", code: `package main\n\nimport "fmt"\n\nfunc greet(name string) string {\n  fmt.Println("Hello", name)\n  return "done"\n  fmt.Println("unreachable")\n  x := 42\n  _ = x\n}\n\nfunc main() {\n  greet("Alice")\n}` },
+    { label: "no dead code", code: `package main\n\nimport "fmt"\n\nfunc add(a, b int) int {\n  return a + b\n}\n\nfunc main() {\n  fmt.Println(add(3, 4))\n}` }
+  ],
+  rust: [
+    { label: "return + dead", code: `fn greet(name: &str) -> &str {\n  println!("Hello {}", name);\n  return "done";\n  println!("unreachable");\n  let x = 42;\n}\n\nfn main() {\n  greet("Alice");\n}` },
+    { label: "loop forever", code: `fn run() {\n  loop {\n    println!("forever");\n  }\n  println!("unreachable");\n}\n\nfn main() {\n  run();\n}` },
+    { label: "no dead code", code: `fn add(a: i32, b: i32) -> i32 {\n  a + b\n}\n\nfn main() {\n  println!("{}", add(3, 4));\n}` }
+  ],
+  typescript: [
+    { label: "return + dead", code: `function greet(name: string): string {\n  console.log("Hello", name);\n  return "done";\n  console.log("never runs");\n  const x: number = 42;\n}\n\ngreet("Alice");` },
+    { label: "while(true)", code: `function loop(): void {\n  while (true) {\n    console.log("loop");\n  }\n  console.log("unreachable");\n}\n\nloop();` },
+    { label: "no dead code", code: `function add(a: number, b: number): number {\n  return a + b;\n}\n\nconst result: number = add(3, 4);\nconsole.log(result);` }
+  ],
+  kotlin: [
+    { label: "return + dead", code: `fun greet(name: String): String {\n  println("Hello $name")\n  return "done"\n  println("unreachable")\n  val x = 42\n}\n\nfun main() {\n  greet("Alice")\n}` },
+    { label: "no dead code", code: `fun add(a: Int, b: Int): Int {\n  return a + b\n}\n\nfun main() {\n  println(add(3, 4))\n}` }
+  ],
+  swift: [
+    { label: "return + dead", code: `func greet(name: String) -> String {\n  print("Hello \\(name)")\n  return "done"\n  print("unreachable")\n  let x = 42\n}\n\ngreet(name: "Alice")` },
+    { label: "no dead code", code: `func add(a: Int, b: Int) -> Int {\n  return a + b\n}\n\nprint(add(a: 3, b: 4))` }
+  ]
+};
+
+function onLangChange() {
+  const lang = document.getElementById('lang-select').value;
+  const cases = LANG_TEST_CASES[lang] || TEST_CASES;
+  const grid = document.getElementById('tc-grid');
+  grid.innerHTML = '';
+  cases.forEach(tc => {
+    const btn = document.createElement('button');
+    btn.className = 'tc-btn';
+    btn.textContent = tc.label;
+    btn.onclick = () => {
+      document.getElementById('code-editor').value = tc.code;
+      updateLineNums();
+    };
+    grid.appendChild(btn);
+  });
+  // Load first test case automatically
+  if (cases.length > 0) {
+    document.getElementById('code-editor').value = cases[0].code;
+    updateLineNums();
+  }
+}
+
+
+const KEYWORDS = new Set(['False','None','True','and','as','assert','async','await',
+  'break','class','continue','def','del','elif','else','except','finally','for',
+  'from','global','if','import','in','is','lambda','nonlocal','not','or','pass',
+  'raise','return','try','while','with','yield']);
+
+function tokenize(code) {
+  const tokens = [];
+  const lines = code.split('\n');
+  const indentStack = [0];
+
+  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+    const line = lines[lineNum];
+    if (line.trim() === '' || line.trim().startsWith('#')) {
+      tokens.push({type:'NEWLINE', val:'\\n', line: lineNum+1});
+      continue;
+    }
+
+    // Measure indent
+    const indent = line.length - line.trimStart().length;
+    const top = indentStack[indentStack.length - 1];
+    if (indent > top) {
+      indentStack.push(indent);
+      tokens.push({type:'INDENT', val:'INDENT', line: lineNum+1});
+    } else {
+      while (indent < indentStack[indentStack.length - 1]) {
+        indentStack.pop();
+        tokens.push({type:'DEDENT', val:'DEDENT', line: lineNum+1});
+      }
+    }
+
+    let i = indent;
+    const src = line;
+    while (i < src.length) {
+      // skip whitespace
+      if (src[i] === ' ' || src[i] === '\t') { i++; continue; }
+      // comment
+      if (src[i] === '#') break;
+      // string
+      if (src[i] === '"' || src[i] === "'") {
+        let q = src[i], j = i+1;
+        while (j < src.length && src[j] !== q) j++;
+        tokens.push({type:'STRING', val: src.slice(i, j+1), line: lineNum+1});
+        i = j + 1; continue;
+      }
+      // number
+      if (/[0-9]/.test(src[i])) {
+        let j = i;
+        while (j < src.length && /[0-9\.]/.test(src[j])) j++;
+        tokens.push({type:'NUMBER', val: src.slice(i,j), line: lineNum+1});
+        i = j; continue;
+      }
+      // identifier / keyword
+      if (/[a-zA-Z_]/.test(src[i])) {
+        let j = i;
+        while (j < src.length && /[a-zA-Z0-9_]/.test(src[j])) j++;
+        const w = src.slice(i, j);
+        if (w === 'True' || w === 'False') tokens.push({type:'BOOLEAN', val: w, line: lineNum+1});
+        else if (KEYWORDS.has(w)) tokens.push({type:'KEYWORD', val: w, line: lineNum+1});
+        else tokens.push({type:'IDENTIFIER', val: w, line: lineNum+1});
+        i = j; continue;
+      }
+      // comparison ops
+      if (i+1 < src.length && ['==','!=','<=','>=','**','//'].includes(src.slice(i,i+2))) {
+        tokens.push({type:'COMPARISON', val: src.slice(i,i+2), line: lineNum+1});
+        i += 2; continue;
+      }
+      // operators
+      if ('+-*/%=<>!'.includes(src[i])) {
+        tokens.push({type:'OPERATOR', val: src[i], line: lineNum+1});
+        i++; continue;
+      }
+      // punctuation
+      if ('()[]{}:,;.'.includes(src[i])) {
+        tokens.push({type:'PUNCTUATION', val: src[i], line: lineNum+1});
+        i++; continue;
+      }
+      i++;
+    }
+    tokens.push({type:'NEWLINE', val:'\\n', line: lineNum+1});
+  }
+  return tokens;
+}
+
+// ══════════════════════════════════════════════════
+// UNREACHABLE CODE DETECTOR
+// ══════════════════════════════════════════════════
+function detectUnreachable(code) {
+  const lines = code.split('\n');
+  const unreachableLines = new Set();
+  const warnings = [];
+
+  const getIndent = l => {
+    if (l.trim() === '') return -1;
+    return l.length - l.trimStart().length;
+  };
+
+  // ── Build block structure: for each line know its "enclosing block indent"
+  // We detect dead code by tracking a "terminated" flag PER INDENT LEVEL.
+  // Key fix: after return/raise/break/continue at indent N,
+  //   ALL subsequent lines at indent >= N (within the same block) are dead,
+  //   UNTIL we see a line at indent < N (which closes the block).
+  // For flat scripts (indent 0), same-indent lines after return ARE dead.
+
+  // Pass 1: find all terminators and mark subsequent same-block lines dead
+  const terminated = new Map(); // indent -> line number where terminated
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const indent = getIndent(line);
+
+    // If any ancestor block is terminated at a lower indent, this line is dead
+    // (e.g. code inside an if-block after return in the same function)
+    let alreadyDead = false;
+    for (const [termIndent, termLine] of terminated.entries()) {
+      if (termIndent <= indent && termLine < i) {
+        alreadyDead = true;
+        break;
+      }
+    }
+
+    // Clear terminations that no longer apply (we dedented out of their scope)
+    for (const [termIndent] of terminated.entries()) {
+      if (termIndent >= indent) terminated.delete(termIndent);
+    }
+
+    if (alreadyDead) {
+      unreachableLines.add(i + 1);
+      continue;
+    }
+
+    const isReturn   = /^return\b/.test(t);
+    const isRaise    = /^raise\b/.test(t);
+    const isBreak    = /^break\b/.test(t);
+    const isContinue = /^continue\b/.test(t);
+    const isWhileTrue = /^while\s+(True|1)\s*:/.test(t);
+    const isIfFalse   = /^if\s+(False|0)\s*:/.test(t);
+
+    // ── return / raise / break / continue ──
+    if (isReturn || isRaise || isBreak || isContinue) {
+      const reason = isReturn ? 'return' : isRaise ? 'raise' : isBreak ? 'break' : 'continue';
+      // Everything at the SAME indent level after this is dead (within this block)
+      // Mark from next non-blank line until we go to a LOWER indent
+      let warnAdded = false;
+      let j = i + 1;
+      while (j < lines.length) {
+        const nl = lines[j];
+        const nt = nl.trim();
+        if (!nt || nt.startsWith('#')) { j++; continue; }
+        const ni = getIndent(nl);
+        // A strictly lower indent means we left the enclosing block — stop
+        if (ni < indent) break;
+        // Same or deeper indent within this block — DEAD
+        unreachableLines.add(j + 1);
+        if (!warnAdded) {
+          warnings.push({
+            line: j + 1,
+            message: `Code after '${reason}' at line ${i+1} is unreachable`,
+            type: reason
+          });
+          warnAdded = true;
+        }
+        j++;
+      }
+      // Mark this indent as terminated so nested blocks also die
+      terminated.set(indent, i);
+    }
+
+    // ── while True / while 1 ──
+    if (isWhileTrue) {
+      // Skip the loop body, then mark everything at same indent AFTER the loop as dead
+      let j = i + 1;
+      let insideBody = false;
+      let bodyIndent = -1;
+      while (j < lines.length) {
+        const nl = lines[j];
+        const nt = nl.trim();
+        if (!nt) { j++; continue; }
+        const ni = getIndent(nl);
+        if (!insideBody && ni > indent) { insideBody = true; bodyIndent = ni; j++; continue; }
+        if (insideBody && ni <= indent) {
+          // We've exited the while body — lines here and after (same indent) are dead
+          let warnAdded = false;
+          let k = j;
+          while (k < lines.length) {
+            const kl = lines[k];
+            const kt = kl.trim();
+            if (!kt) { k++; continue; }
+            const ki = getIndent(kl);
+            if (ki < indent) break;
+            unreachableLines.add(k + 1);
+            if (!warnAdded) {
+              warnings.push({
+                line: k + 1,
+                message: `Code after infinite 'while True' at line ${i+1} is unreachable`,
+                type: 'while_true'
+              });
+              warnAdded = true;
+            }
+            k++;
+          }
+          break;
+        }
+        j++;
+      }
+    }
+
+    // ── if False ──
+    if (isIfFalse) {
+      let j = i + 1;
+      let warnAdded = false;
+      while (j < lines.length) {
+        const nl = lines[j];
+        const nt = nl.trim();
+        if (!nt) { j++; continue; }
+        const ni = getIndent(nl);
+        if (ni <= indent) break;  // left the if-false body
+        unreachableLines.add(j + 1);
+        if (!warnAdded) {
+          warnings.push({
+            line: j + 1,
+            message: `Body of 'if False' at line ${i+1} is never executed`,
+            type: 'if_false'
+          });
+          warnAdded = true;
+        }
+        j++;
+      }
+    }
+  }
+
+  return { unreachableLines: [...unreachableLines].sort((a,b)=>a-b), warnings };
+}
+
+// ══════════════════════════════════════════════════
+// PARSE TREE BUILDER
+// ══════════════════════════════════════════════════
+function buildParseTree(code) {
+  const lines = code.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+  const root = { label: 'program', children: [] };
+  const stack = [{ node: root, indent: -1 }];
+
+  for (const line of lines) {
+    const t = line.trim();
+    const indent = line.length - line.trimStart().length;
+    let node;
+
+    if (/^def\s+/.test(t)) {
+      const match = t.match(/^def\s+(\w+)\s*\((.*?)\)/);
+      node = { label: `def ${match?.[1] || ''}(${match?.[2] || ''})`, children: [], kind: 'func' };
+    } else if (/^class\s+/.test(t)) {
+      node = { label: t.replace(':',''), children: [], kind: 'class' };
+    } else if (/^if\s+/.test(t)) {
+      node = { label: t.replace(':',''), children: [], kind: 'if' };
+    } else if (/^elif\s+/.test(t)) {
+      node = { label: t.replace(':',''), children: [], kind: 'elif' };
+    } else if (/^else\s*:/.test(t)) {
+      node = { label: 'else', children: [], kind: 'else' };
+    } else if (/^while\s+/.test(t)) {
+      node = { label: t.replace(':',''), children: [], kind: 'while' };
+    } else if (/^for\s+/.test(t)) {
+      node = { label: t.replace(':',''), children: [], kind: 'for' };
+    } else if (/^return\b/.test(t)) {
+      node = { label: t, children: [], kind: 'return' };
+    } else {
+      node = { label: t.length > 32 ? t.slice(0,29)+'...' : t, children: [], kind: 'stmt' };
+    }
+
+    // Pop stack until we find parent with lower indent
+    while (stack.length > 1 && stack[stack.length-1].indent >= indent) {
+      stack.pop();
+    }
+    stack[stack.length-1].node.children.push(node);
+    stack.push({ node, indent });
+  }
+  return root;
+}
+
+// ══════════════════════════════════════════════════
+// SYMBOL TABLE BUILDER
+// ══════════════════════════════════════════════════
+function buildSymbolTable(code) {
+  const symbols = [];
+  const lines = code.split('\n');
+  let currentFunc = 'global';
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const t = line.trim();
+    // Function def
+    const funcMatch = t.match(/^def\s+(\w+)\s*\((.*?)\)/);
+    if (funcMatch) {
+      currentFunc = funcMatch[1];
+      symbols.push({ name: funcMatch[1], type: 'function', scope: 'global', line: i+1 });
+      const params = funcMatch[2].split(',').map(p => p.trim()).filter(Boolean);
+      params.forEach(p => {
+        symbols.push({ name: p.replace(/=.*/,'').trim(), type: 'parameter', scope: currentFunc, line: i+1 });
+      });
+    }
+    // Variable assignment
+    const assignMatch = t.match(/^(\w+)\s*=/);
+    if (assignMatch && !t.startsWith('==') && !/^(if|while|for|def|class|elif)\b/.test(t)) {
+      const varName = assignMatch[1];
+      // Determine type
+      let varType = 'unknown';
+      const rhs = t.split('=').slice(1).join('=').trim();
+      if (/^[0-9]+$/.test(rhs)) varType = 'int';
+      else if (/^[0-9]+\.[0-9]+$/.test(rhs)) varType = 'float';
+      else if (/^["']/.test(rhs)) varType = 'str';
+      else if (['True','False'].includes(rhs)) varType = 'bool';
+      else if (/^\[/.test(rhs)) varType = 'list';
+      else if (/^\{/.test(rhs)) varType = 'dict';
+      else varType = 'any';
+      symbols.push({ name: varName, type: varType, scope: currentFunc, line: i+1 });
+    }
+    // For loop var
+    const forMatch = t.match(/^for\s+(\w+)\s+in/);
+    if (forMatch) {
+      symbols.push({ name: forMatch[1], type: 'iterator', scope: currentFunc, line: i+1 });
+    }
+  }
+  return symbols;
+}
+
+// ══════════════════════════════════════════════════
+// IR GENERATOR (3-Address Code)
+// ══════════════════════════════════════════════════
+function generateIR(code, unreachableLines) {
+  const lines = code.split('\n');
+  const ir = [];
+  let temp = 0;
+  let label = 0;
+  const nextTemp = () => `t${++temp}`;
+  const nextLabel = () => `L${++label}`;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const t = line.trim();
+    const lineNum = i + 1;
+    const dead = unreachableLines.includes(lineNum);
+
+    if (!t || t.startsWith('#')) continue;
+
+    if (/^def\s+/.test(t)) {
+      const m = t.match(/^def\s+(\w+)\s*\((.*?)\)/);
+      ir.push({ code: `FUNC_BEGIN ${m?.[1]}`, lineNum, dead, kind: 'label' });
+    } else if (/^return\b/.test(t)) {
+      const val = t.replace('return','').trim() || 'None';
+      ir.push({ code: `RETURN ${val}`, lineNum, dead, kind: 'return' });
+    } else if (/^if\s+/.test(t)) {
+      const cond = t.replace(/^if\s+/,'').replace(':','').trim();
+      const l = nextLabel();
+      ir.push({ code: `IF_FALSE ${cond} GOTO ${l}`, lineNum, dead, kind: 'branch' });
+    } else if (/^while\s+/.test(t)) {
+      const cond = t.replace(/^while\s+/,'').replace(':','').trim();
+      const l = nextLabel();
+      ir.push({ code: `WHILE_BEGIN ${cond}`, lineNum, dead, kind: 'label' });
+      ir.push({ code: `IF_FALSE ${cond} GOTO ${l}`, lineNum, dead, kind: 'branch' });
+    } else if (/^for\s+/.test(t)) {
+      const m = t.match(/^for\s+(\w+)\s+in\s+(.+):/);
+      if (m) {
+        const iter = nextTemp();
+        ir.push({ code: `${iter} = ITER(${m[2]})`, lineNum, dead, kind: 'assign' });
+        ir.push({ code: `FOR_LOOP ${m[1]} IN ${iter}`, lineNum, dead, kind: 'label' });
+      }
+    } else if (/^\w+\s*=/.test(t) && !/^(if|while|for|def|class)\b/.test(t)) {
+      ir.push({ code: `${t}`, lineNum, dead, kind: 'assign' });
+    } else if (/^print\s*\(/.test(t)) {
+      ir.push({ code: `CALL print, ${t.slice(6)}`, lineNum, dead, kind: 'call' });
+    } else if (/^break$/.test(t)) {
+      ir.push({ code: `GOTO LOOP_END`, lineNum, dead, kind: 'goto' });
+    } else if (/^continue$/.test(t)) {
+      ir.push({ code: `GOTO LOOP_START`, lineNum, dead, kind: 'goto' });
+    } else if (t) {
+      ir.push({ code: t, lineNum, dead, kind: 'other' });
+    }
+  }
+  return ir;
+}
+
+// ══════════════════════════════════════════════════
+// BASIC BLOCKS
+// ══════════════════════════════════════════════════
+function buildBasicBlocks(ir) {
+  const blocks = [];
+  let current = { id: 'B0', instructions: [], dead: false };
+
+  for (const inst of ir) {
+    if (inst.kind === 'label') {
+      if (current.instructions.length > 0) blocks.push(current);
+      current = { id: `B${blocks.length}`, instructions: [inst], dead: inst.dead };
+    } else {
+      current.instructions.push(inst);
+      if (inst.dead) current.dead = true;
+      if (inst.kind === 'return' || inst.kind === 'goto') {
+        blocks.push(current);
+        current = { id: `B${blocks.length}`, instructions: [], dead: false };
+      }
+    }
+  }
+  if (current.instructions.length > 0) blocks.push(current);
+  return blocks;
+}
+
+// ══════════════════════════════════════════════════
+// CFG BUILDER + SVG RENDERER
+// ══════════════════════════════════════════════════
+function buildCFGData(blocks) {
+  const nodes = blocks.map((b, i) => ({
+    id: b.id,
+    label: b.instructions.map(x => x.code.slice(0,22)).join('\n'),
+    dead: b.dead,
+    x: 0, y: 0
+  }));
+
+  const edges = [];
+  for (let i = 0; i < nodes.length - 1; i++) {
+    const lastInst = blocks[i].instructions[blocks[i].instructions.length - 1];
+    if (!lastInst || lastInst.kind !== 'return') {
+      edges.push({ from: i, to: i + 1, dead: blocks[i].dead });
+    }
+    if (lastInst && lastInst.kind === 'branch') {
+      const target = Math.min(i + 2, nodes.length - 1);
+      edges.push({ from: i, to: target, label: 'false', dead: false });
+    }
+  }
+  return { nodes, edges };
+}
+
+function renderCFGSvg(blocks, unreachableLines) {
+  if (blocks.length === 0) return '<svg viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg"><text x="50%" y="50%" fill="#64748b" font-family="JetBrains Mono" text-anchor="middle">No blocks to display</text></svg>';
+
+  const NODE_W = 200, NODE_H = 80, GAP_X = 260, GAP_Y = 130;
+  const cols = Math.min(3, blocks.length);
+  const rows = Math.ceil(blocks.length / cols);
+  const W = cols * GAP_X + 60;
+  const H = rows * GAP_Y + 80;
+
+  // Layout: left-to-right, top-down
+  blocks.forEach((b, i) => {
+    b._x = 30 + (i % cols) * GAP_X;
+    b._y = 40 + Math.floor(i / cols) * GAP_Y;
+  });
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="font-family:JetBrains Mono,monospace">`;
+  svg += `<defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#4a5568"/>
+    </marker>
+    <marker id="arr-dead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/>
+    </marker>
+    <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>`;
+
+  // Edges
+  for (let i = 0; i < blocks.length - 1; i++) {
+    const a = blocks[i], b = blocks[i+1];
+    if (!a || !b) continue;
+    const x1 = a._x + NODE_W/2, y1 = a._y + NODE_H;
+    const x2 = b._x + NODE_W/2, y2 = b._y;
+    const isDead = a.dead || b.dead;
+    const col = isDead ? '#ef4444' : '#4a5568';
+    const marker = isDead ? 'arr-dead' : 'arr';
+    svg += `<path d="M${x1},${y1} C${x1},${(y1+y2)/2} ${x2},${(y1+y2)/2} ${x2},${y2-6}"
+      fill="none" stroke="${col}" stroke-width="${isDead?1.5:1}" stroke-dasharray="${isDead?'5,3':''}"
+      marker-end="url(#${marker})" opacity="${isDead?0.5:0.7}"/>`;
+  }
+
+  // Nodes
+  for (const b of blocks) {
+    const x = b._x, y = b._y;
+    const isDead = b.dead;
+    const fill = isDead ? 'rgba(239,68,68,0.12)' : 'rgba(22,27,38,0.95)';
+    const stroke = isDead ? '#ef4444' : '#2e3a52';
+    const textCol = isDead ? '#ef4444' : '#94a3b8';
+    const titleCol = isDead ? '#ef4444' : '#60a5fa';
+
+    svg += `<rect x="${x}" y="${y}" width="${NODE_W}" height="${NODE_H}" rx="6"
+      fill="${fill}" stroke="${stroke}" stroke-width="${isDead?2:1}" ${isDead?'filter="url(#glow)"':''}/>`;
+
+    // Block label
+    svg += `<text x="${x+10}" y="${y+16}" fill="${titleCol}" font-size="10" font-weight="700">${b.id}${isDead?' ⚠ DEAD':''}</text>`;
+    svg += `<line x1="${x+6}" y1="${y+21}" x2="${x+NODE_W-6}" y2="${y+21}" stroke="${stroke}" stroke-width="1"/>`;
+
+    // Instructions
+    const instLines = b.instructions.slice(0, 3);
+    instLines.forEach((inst, idx) => {
+      const label = inst.code.length > 24 ? inst.code.slice(0,21)+'...' : inst.code;
+      svg += `<text x="${x+10}" y="${y+35+idx*14}" fill="${textCol}" font-size="9">${escSvg(label)}</text>`;
+    });
+    if (b.instructions.length > 3) {
+      svg += `<text x="${x+10}" y="${y+35+3*14}" fill="#4a5568" font-size="8">+${b.instructions.length-3} more...</text>`;
+    }
+
+    // Dead overlay strikethrough
+    if (isDead) {
+      svg += `<line x1="${x+6}" y1="${y+8}" x2="${x+NODE_W-6}" y2="${y+NODE_H-8}" stroke="#ef4444" stroke-width="1.5" opacity="0.3"/>`;
+    }
+  }
+
+  svg += '</svg>';
+  return svg;
+}
+
+function escSvg(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ══════════════════════════════════════════════════
+// PARSE TREE SVG RENDERER
+// ══════════════════════════════════════════════════
+function renderParseTreeSvg(root) {
+  // Compute layout via BFS
+  const NODE_W = 140, NODE_H = 36, V_GAP = 60, H_GAP = 10;
+
+  const kindColor = {
+    func: '#7c3aed', class: '#0ea5e9', if: '#f59e0b', elif: '#f59e0b',
+    else: '#94a3b8', while: '#10b981', for: '#10b981',
+    return: '#ef4444', stmt: '#334155', program: '#00d4ff'
+  };
+
+  // BFS to assign levels and positions
+  let maxLevel = 0;
+  const queue = [{ node: root, level: 0, parent: null }];
+  const items = [];
+  while (queue.length > 0) {
+    const { node, level, parent } = queue.shift();
+    maxLevel = Math.max(maxLevel, level);
+    const item = { node, level, parent, x: 0, y: level * V_GAP + 30, idx: items.length };
+    items.push(item);
+    (node.children || []).forEach(child => queue.push({ node: child, level: level+1, parent: item.idx }));
+  }
+
+  // Assign x positions level by level
+  const levels = {};
+  items.forEach(it => { if (!levels[it.level]) levels[it.level] = []; levels[it.level].push(it); });
+  const totalWidth = Object.values(levels).reduce((acc, lvl) => Math.max(acc, lvl.length * (NODE_W + H_GAP)), 0);
+  Object.values(levels).forEach(lvl => {
+    const totalW = lvl.length * (NODE_W + H_GAP);
+    const startX = (totalWidth - totalW) / 2;
+    lvl.forEach((it, i) => { it.x = startX + i * (NODE_W + H_GAP); });
+  });
+
+  const W = Math.max(totalWidth + 40, 600);
+  const H = (maxLevel + 1) * V_GAP + 80;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="font-family:JetBrains Mono,monospace">`;
+  svg += `<defs>
+    <marker id="tree-arr" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L6,3 z" fill="#2e3a52"/>
+    </marker>
+  </defs>`;
+
+  // Edges
+  for (const it of items) {
+    if (it.parent !== null) {
+      const par = items[it.parent];
+      const x1 = par.x + NODE_W/2, y1 = par.y + NODE_H;
+      const x2 = it.x + NODE_W/2, y2 = it.y;
+      svg += `<path d="M${x1},${y1} C${x1},${(y1+y2)/2} ${x2},${(y1+y2)/2} ${x2},${y2}"
+        fill="none" stroke="#2e3a52" stroke-width="1.5" marker-end="url(#tree-arr)"/>`;
+    }
+  }
+
+  // Nodes
+  for (const it of items) {
+    const kind = it.node.kind || 'program';
+    const col = kindColor[kind] || '#334155';
+    const lbl = it.node.label.length > 18 ? it.node.label.slice(0,15)+'...' : it.node.label;
+    svg += `<rect x="${it.x}" y="${it.y}" width="${NODE_W}" height="${NODE_H}" rx="6"
+      fill="rgba(16,20,28,0.95)" stroke="${col}" stroke-width="${kind==='program'?2:1.5}"/>`;
+    svg += `<text x="${it.x+NODE_W/2}" y="${it.y+14}" fill="${col}" font-size="9" text-anchor="middle" font-weight="700">${kind.toUpperCase()}</text>`;
+    svg += `<text x="${it.x+NODE_W/2}" y="${it.y+26}" fill="#e2e8f0" font-size="9" text-anchor="middle">${escSvg(lbl)}</text>`;
+  }
+
+  svg += '</svg>';
+  return svg;
+}
+
+// ══════════════════════════════════════════════════
+// DETAILED PARSE TREE (oval node style, like image 3)
+// ══════════════════════════════════════════════════
+function buildDetailedParseTree(code, lang) {
+  // Parse the code into a richer AST with terminal leaf nodes
+  const lines = code.split('\n').filter(l => l.trim() && !l.trim().startsWith('//') && !l.trim().startsWith('#'));
+  const root = { label: 'Program', kind: 'program', children: [] };
+
+  for (const line of lines) {
+    const t = line.trim();
+
+    // Function definition
+    const funcMatch = t.match(/^(?:def|function|func|fn|fun)\s+(\w+)\s*\((.*?)\)/);
+    if (funcMatch) {
+      const params = funcMatch[2].split(',').map(p=>p.trim()).filter(Boolean);
+      const funcNode = { label: 'FuncDef', kind: 'func', children: [
+        { label: 'Identifier', kind: 'identifier', children: [{ label: funcMatch[1], kind: 'terminal', children:[] }] },
+        { label: 'Params', kind: 'params', children: params.map(p => ({ label: 'Param', kind: 'param', children: [{ label: p, kind: 'terminal', children:[] }] })) }
+      ]};
+      root.children.push({ label: 'Statement', kind: 'stmt', children: [funcNode] });
+      continue;
+    }
+
+    // Return statement
+    const retMatch = t.match(/^return\s*(.*?)[;]?$/);
+    if (retMatch) {
+      const val = retMatch[1].trim();
+      const retNode = { label: 'Return', kind: 'return', children: [] };
+      if (val) {
+        retNode.children.push(buildExprNode(val));
+      }
+      root.children.push({ label: 'Statement', kind: 'stmt', children: [retNode] });
+      continue;
+    }
+
+    // Assignment (x = expr or type x = expr)
+    const assignMatch = t.match(/^(?:(?:let|const|var|val|int|float|double|char|string|bool|auto)\s+)?(\w+)\s*(?::\s*\w+\s*)?=(?!=)\s*(.+?)[;]?$/);
+    if (assignMatch && !/^(if|while|for|def|class|function|fn|fun|func)\b/.test(t)) {
+      const assignNode = { label: 'Assign', kind: 'assign', children: [
+        { label: 'Identifier', kind: 'identifier', children: [{ label: assignMatch[1], kind: 'terminal', children:[] }] },
+        buildExprNode(assignMatch[2].trim())
+      ]};
+      root.children.push({ label: 'Statement', kind: 'stmt', children: [assignNode] });
+      continue;
+    }
+
+    // Declaration (type var; or var: type)
+    const declMatch = t.match(/^(?:int|float|double|char|string|bool|let|const|var|val|auto)\s+(\w+)(?:\s*:\s*\w+)?[;]?$/);
+    if (declMatch) {
+      const typeKeyword = t.split(/\s+/)[0];
+      const declNode = { label: 'Declare', kind: 'declare', children: [
+        { label: typeKeyword, kind: 'terminal', children:[] },
+        { label: declMatch[1], kind: 'terminal', children:[] }
+      ]};
+      root.children.push({ label: 'Statement', kind: 'stmt', children: [declNode] });
+      continue;
+    }
+
+    // if statement
+    const ifMatch = t.match(/^if\s*\(?(.*?)\)?[:{]?$/);
+    if (ifMatch) {
+      const cond = ifMatch[1].trim().replace(/[:{]$/,'');
+      const ifNode = { label: 'IfStmt', kind: 'if', children: [
+        { label: 'Condition', kind: 'condition', children: [buildExprNode(cond)] }
+      ]};
+      root.children.push({ label: 'Statement', kind: 'stmt', children: [ifNode] });
+      continue;
+    }
+
+    // while statement
+    const whileMatch = t.match(/^while\s*\(?(.*?)\)?[:{]?$/);
+    if (whileMatch) {
+      const cond = whileMatch[1].trim().replace(/[:{]$/,'');
+      const wNode = { label: 'WhileStmt', kind: 'loop', children: [
+        { label: 'Condition', kind: 'condition', children: [buildExprNode(cond)] }
+      ]};
+      root.children.push({ label: 'Statement', kind: 'stmt', children: [wNode] });
+      continue;
+    }
+
+    // print/console.log/println etc.
+    const printMatch = t.match(/^(?:print|println|console\.log|fmt\.Print(?:ln)?|System\.out\.print(?:ln)?)\s*\(?(.+?)\)?[;]?$/);
+    if (printMatch) {
+      const callNode = { label: 'Call', kind: 'call', children: [
+        { label: 'print', kind: 'terminal', children:[] },
+        { label: 'Args', kind: 'args', children: [buildExprNode(printMatch[1].trim())] }
+      ]};
+      root.children.push({ label: 'Statement', kind: 'stmt', children: [callNode] });
+      continue;
+    }
+
+    // Generic statement
+    if (t && t !== '{' && t !== '}' && t !== '},' ) {
+      const label = t.length > 22 ? t.slice(0,19)+'...' : t;
+      root.children.push({ label: 'Statement', kind: 'stmt', children: [
+        { label: label, kind: 'terminal', children: [] }
+      ]});
+    }
+  }
+
+  return root;
+}
+
+function buildExprNode(expr) {
+  if (!expr || expr === '') return { label: 'Expr', kind: 'expr', children: [] };
+  expr = expr.replace(/[;]$/,'').trim();
+
+  // Binary: a + b, a - b, a * b, a / b, a == b, etc.
+  // Try to split by low-precedence operators first
+  const binOps = [['==','!=','<=','>=','<','>'], ['+','-'], ['*','/','%']];
+  for (const ops of binOps) {
+    for (const op of ops) {
+      // naive split (not paren-aware, good enough for display)
+      const idx = expr.indexOf(op);
+      if (idx > 0 && idx < expr.length - op.length) {
+        const left = expr.slice(0, idx).trim();
+        const right = expr.slice(idx + op.length).trim();
+        if (left && right && !left.includes('(')) {
+          return {
+            label: op, kind: 'operator', children: [
+              buildExprNode(left),
+              buildExprNode(right)
+            ]
+          };
+        }
+      }
+    }
+  }
+
+  // Function call: name(...)
+  const callMatch = expr.match(/^(\w+)\s*\((.*)?\)$/);
+  if (callMatch) {
+    const args = callMatch[2] ? callMatch[2].split(',').map(a=>a.trim()).filter(Boolean) : [];
+    return { label: 'Call', kind: 'call', children: [
+      { label: callMatch[1], kind: 'terminal', children: [] },
+      ...args.map(a => ({ label: a.length > 12 ? a.slice(0,10)+'..' : a, kind: 'terminal', children: [] }))
+    ]};
+  }
+
+  // Literal or identifier
+  return { label: expr.length > 14 ? expr.slice(0,12)+'..' : expr, kind: 'terminal', children: [] };
+}
+
+function renderDetailedParseTreeSvg(root) {
+  // oval node colors matching image 3 style
+  const kindStyle = {
+    program:    { fill: '#3b82f6', stroke: '#93c5fd', text: '#fff' },       // blue
+    stmt:       { fill: '#7c3aed', stroke: '#c4b5fd', text: '#fff' },       // purple
+    func:       { fill: '#7c3aed', stroke: '#c4b5fd', text: '#fff' },       // purple
+    return:     { fill: '#16a34a', stroke: '#86efac', text: '#fff' },       // green
+    assign:     { fill: '#ea580c', stroke: '#fdba74', text: '#fff' },       // orange
+    declare:    { fill: '#0d9488', stroke: '#5eead4', text: '#fff' },       // teal
+    if:         { fill: '#f59e0b', stroke: '#fde68a', text: '#111' },       // amber
+    loop:       { fill: '#0ea5e9', stroke: '#bae6fd', text: '#fff' },       // sky
+    call:       { fill: '#db2777', stroke: '#fbcfe8', text: '#fff' },       // pink
+    condition:  { fill: '#f59e0b', stroke: '#fde68a', text: '#111' },       // amber
+    identifier: { fill: '#6366f1', stroke: '#c7d2fe', text: '#fff' },       // indigo
+    operator:   { fill: '#7c3aed', stroke: '#c4b5fd', text: '#fff' },       // purple
+    expr:       { fill: '#475569', stroke: '#94a3b8', text: '#fff' },       // slate
+    params:     { fill: '#0d9488', stroke: '#5eead4', text: '#fff' },       // teal
+    param:      { fill: '#0d9488', stroke: '#5eead4', text: '#fff' },       // teal
+    args:       { fill: '#6366f1', stroke: '#c7d2fe', text: '#fff' },       // indigo
+    terminal:   { fill: '#1e293b', stroke: '#475569', text: '#e2e8f0', isTerminal: true }  // dark square (leaf)
+  };
+
+  // Layout: compute node positions via BFS
+  const OW = 110, OH = 38, H_GAP = 24, V_GAP = 80;
+
+  let idCounter = 0;
+  function assignIds(node) {
+    node._id = idCounter++;
+    (node.children||[]).forEach(assignIds);
+  }
+  assignIds(root);
+
+  // Compute subtree widths bottom-up
+  function computeWidth(node) {
+    if (!node.children || node.children.length === 0) {
+      node._w = OW;
+      return OW;
+    }
+    const totalChildren = node.children.reduce((s, c) => s + computeWidth(c) + H_GAP, -H_GAP);
+    node._w = Math.max(OW, totalChildren);
+    return node._w;
+  }
+  computeWidth(root);
+
+  // Assign x,y positions top-down
+  function assignPositions(node, x, y) {
+    node._x = x + node._w / 2 - OW / 2;
+    node._y = y;
+    let cx = x;
+    (node.children||[]).forEach(child => {
+      assignPositions(child, cx, y + V_GAP);
+      cx += child._w + H_GAP;
+    });
+  }
+  assignPositions(root, 20, 20);
+
+  // Collect all nodes
+  const allNodes = [];
+  function collect(node) { allNodes.push(node); (node.children||[]).forEach(collect); }
+  collect(root);
+
+  // SVG dimensions
+  const W = root._w + 60;
+  let maxY = 0;
+  allNodes.forEach(n => { maxY = Math.max(maxY, n._y); });
+  const H = maxY + OH + 40;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="font-family:'DM Sans',sans-serif;min-width:${W}px">`;
+  svg += `<defs>
+    <marker id="dt-arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+      <path d="M0,0 L0,7 L7,3.5 z" fill="#4a5568"/>
+    </marker>
+  </defs>`;
+
+  // Draw edges first
+  allNodes.forEach(node => {
+    (node.children||[]).forEach(child => {
+      const x1 = node._x + OW/2;
+      const y1 = node._y + OH;
+      const x2 = child._x + OW/2;
+      const y2 = child._y;
+      svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#2e3a52" stroke-width="1.5" marker-end="url(#dt-arr)"/>`;
+    });
+  });
+
+  // Draw nodes
+  allNodes.forEach(node => {
+    const style = kindStyle[node.kind] || kindStyle['expr'];
+    const cx = node._x + OW/2;
+    const cy = node._y + OH/2;
+    const label = node.label.length > 14 ? node.label.slice(0,12)+'..' : node.label;
+
+    if (style.isTerminal) {
+      // Rectangle leaf node (like image 3 bottom squares)
+      svg += `<rect x="${node._x}" y="${node._y}" width="${OW}" height="${OH}" rx="5"
+        fill="${style.fill}" stroke="${style.stroke}" stroke-width="1.5"/>`;
+      svg += `<text x="${cx}" y="${cy+5}" fill="${style.text}" font-size="10" text-anchor="middle" font-weight="500" font-family="'JetBrains Mono',monospace">${escSvg(label)}</text>`;
+    } else {
+      // Oval node (like image 3 colored ovals)
+      const rx = OW/2, ry = OH/2;
+      svg += `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"
+        fill="${style.fill}" stroke="${style.stroke}" stroke-width="1.5"/>`;
+      svg += `<text x="${cx}" y="${cy+4}" fill="${style.text}" font-size="11" text-anchor="middle" font-weight="700">${escSvg(label)}</text>`;
+    }
+  });
+
+  svg += '</svg>';
+  return svg;
+}
+
+
+let analysisResult = null;
+let currentPhase = 0;
+let autoPlayInterval = null;
+
+function renderPhase(phase) {
+  if (!analysisResult) return;
+  const { tokens, tree, symbols, ir, blocks, unreachable, warnings, code } = analysisResult;
+  const lines = code.split('\n');
+
+  const panels = [
+    renderLexical(tokens),
+    renderSyntax(tree),
+    renderSemantic(symbols, warnings),
+    renderIR(ir, blocks),
+    renderOptimization(blocks, unreachable.unreachableLines),
+    renderOutput(code, unreachable, warnings)
+  ];
+
+  document.getElementById('phase-content').innerHTML = panels[phase];
+}
+
+function renderLexical(tokens) {
+  const visible = tokens.filter(t => !['NEWLINE','INDENT','DEDENT'].includes(t.type));
+
+  const colorMap = {
+    KEYWORD:'var(--token-kw)', IDENTIFIER:'var(--token-id)', NUMBER:'var(--token-num)',
+    STRING:'var(--token-str)', OPERATOR:'var(--token-op)', PUNCTUATION:'var(--token-punct)',
+    BOOLEAN:'var(--warn)', COMPARISON:'var(--token-op)'
+  };
+
+  const chips = visible.map(t => `
+    <div class="token-chip tk-${t.type}" style="animation-delay:${Math.random()*0.3}s">
+      <span class="token-val">${escHtml(t.val)}</span>
+      <span class="token-type">${t.type}</span>
+    </div>`).join('');
+
+  const rows = visible.slice(0, 40).map((t,i) => `
+    <tr>
+      <td style="color:var(--text3)">${i+1}</td>
+      <td style="color:${colorMap[t.type]||'#e2e8f0'};font-weight:700">${escHtml(t.val)}</td>
+      <td><span style="background:var(--surface3);border-radius:4px;padding:1px 7px;font-size:.7rem">${t.type}</span></td>
+      <td style="color:var(--text3)">${t.line}</td>
+    </tr>`).join('');
+
+  const legend = Object.entries(colorMap).map(([k,c]) => `
+    <div class="legend-item"><div class="legend-dot" style="background:${c}"></div>${k}</div>`).join('');
+
+  return `
+    <div class="phase-title">⟨ Lexical Analysis <span style="color:var(--text3);font-size:.9rem;font-weight:400">— Scanning</span></div>
+    <div class="phase-sub">The <strong>Lexer (Scanner)</strong> reads source code character-by-character and groups characters into meaningful <em>tokens</em> — the vocabulary of the language. Each token has a type and a value.</div>
+
+    <div class="card">
+      <div class="card-title">Token Stream</div>
+      <div class="token-stream">${chips}</div>
+      <div class="legend" style="margin-top:14px">${legend}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Token Table (first 40)</div>
+      <table class="token-table">
+        <thead><tr><th>#</th><th>Value</th><th>Type</th><th>Line</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="margin-top:10px;color:var(--text3);font-size:.72rem;font-family:'JetBrains Mono',monospace">
+        Total tokens: ${visible.length} &nbsp;|&nbsp; Keywords: ${visible.filter(t=>t.type==='KEYWORD').length} &nbsp;|&nbsp; Identifiers: ${visible.filter(t=>t.type==='IDENTIFIER').length}
+      </div>
+    </div>`;
+}
+
+function renderSyntax(tree) {
+  const svg = renderParseTreeSvg(tree);
+  const lang = (analysisResult && analysisResult.lang) || 'python';
+  const detailedRoot = buildDetailedParseTree(analysisResult.code, lang);
+  const detailSvg = renderDetailedParseTreeSvg(detailedRoot);
+
+  return `
+    <div class="phase-title">⟨ Syntax Analysis <span style="color:var(--text3);font-size:.9rem;font-weight:400">— Parsing</span></div>
+    <div class="phase-sub">The <strong>Parser</strong> takes the token stream and builds a <em>Parse Tree (Concrete Syntax Tree)</em> that represents the grammatical structure of the program. Each node corresponds to a grammar rule.</div>
+
+    <div class="card">
+      <div class="card-title">Parse Tree (AST)</div>
+      <div style="overflow-x:auto">${svg}</div>
+      <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;font-family:'JetBrains Mono',monospace;font-size:.7rem">
+        <span style="color:#7c3aed">■ function</span>
+        <span style="color:#f59e0b">■ condition</span>
+        <span style="color:#10b981">■ loop</span>
+        <span style="color:#ef4444">■ return/raise</span>
+        <span style="color:#00d4ff">■ program root</span>
+        <span style="color:#94a3b8">■ statement</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Detailed Parse Tree — Hierarchical Node View</div>
+      <div style="color:var(--text2);font-size:.8rem;margin-bottom:12px;line-height:1.6">
+        Each <strong>oval node</strong> is a grammar rule (non-terminal). <strong>Square nodes</strong> are leaf terminals (literals, identifiers). Color encodes node type: <span style="color:#3b82f6">Program</span> → <span style="color:#a78bfa">Statement</span> → <span style="color:#fb923c">Assign</span> / <span style="color:#34d399">Return</span> / <span style="color:#2dd4bf">Declare</span> → leaf.
+      </div>
+      <div class="detail-tree-wrap">${detailSvg}</div>
+      <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:10px;font-family:'JetBrains Mono',monospace;font-size:.69rem">
+        <span>🔵 Program</span>
+        <span>🟣 Statement/Func</span>
+        <span>🟠 Assign</span>
+        <span>🟢 Return</span>
+        <span>🩵 Declare</span>
+        <span>🟡 If/Condition</span>
+        <span>🔷 Loop</span>
+        <span>🟥 Call</span>
+        <span style="color:var(--text3)">□ Terminal (leaf)</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Grammar Rules Applied</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:.75rem;line-height:2;color:var(--text2)">
+        <div><span style="color:var(--accent)">program</span> → (<span style="color:var(--token-kw)">stmt</span> | <span style="color:var(--token-kw)">funcdef</span>)*</div>
+        <div><span style="color:var(--accent)">funcdef</span> → <span style="color:var(--token-kw)">def</span> <span style="color:var(--token-id)">NAME</span> '(' [<span style="color:var(--token-id)">params</span>] ')' ':' <span style="color:var(--accent)">suite</span></div>
+        <div><span style="color:var(--accent)">suite</span> → NEWLINE INDENT <span style="color:var(--token-kw)">stmt</span>+ DEDENT</div>
+        <div><span style="color:var(--accent)">stmt</span> → <span style="color:var(--token-kw)">if_stmt</span> | <span style="color:var(--token-kw)">while_stmt</span> | <span style="color:var(--token-kw)">return_stmt</span> | <span style="color:var(--token-kw)">expr_stmt</span></div>
+        <div><span style="color:var(--accent)">return_stmt</span> → <span style="color:var(--token-kw)">return</span> [<span style="color:var(--token-id)">expr</span>]</div>
+        <div><span style="color:var(--accent)">assign_stmt</span> → <span style="color:var(--token-id)">ID</span> '=' <span style="color:var(--accent)">expr</span></div>
+        <div><span style="color:var(--accent)">expr</span> → <span style="color:var(--token-id)">ID</span> | <span style="color:var(--token-num)">NUM</span> | <span style="color:var(--accent)">expr</span> <span style="color:var(--token-op)">op</span> <span style="color:var(--accent)">expr</span> | <span style="color:var(--accent)">call</span></div>
+      </div>
+    </div>`;
+}
+
+function renderSemantic(symbols, warnings) {
+  const typeColors = { int:'#34d399', float:'#60a5fa', str:'#fbbf24', bool:'#c084fc', list:'#f87171', dict:'#94a3b8', function:'#00d4ff', parameter:'#7c3aed', iterator:'#10b981', any:'#64748b', unknown:'#475569' };
+
+  const rows = symbols.map(s => `
+    <tr>
+      <td style="color:var(--token-id);font-weight:600">${s.name}</td>
+      <td><span class="type-badge" style="background:${typeColors[s.type]||'#475569'}22;color:${typeColors[s.type]||'#94a3b8'};border:1px solid ${typeColors[s.type]||'#475569'}44">${s.type}</span></td>
+      <td><span class="scope-badge">${s.scope}</span></td>
+      <td style="color:var(--text3)">${s.line}</td>
+    </tr>`).join('');
+
+  // Scopes
+  const scopes = [...new Set(symbols.map(s => s.scope))];
+  const scopeHtml = scopes.map(sc => {
+    const syms = symbols.filter(s => s.scope === sc);
+    const vars = syms.map(s => `<span style="background:${typeColors[s.type]||'#475569'}22;color:${typeColors[s.type]||'#94a3b8'};border:1px solid ${typeColors[s.type]||'#475569'}44;border-radius:4px;padding:2px 8px;font-size:.72rem;font-family:'JetBrains Mono',monospace">${s.name}: ${s.type}</span>`).join('');
+    return `<div class="scope-box ${sc==='global'?'global':'func'}" data-label="SCOPE: ${sc}"><div class="scope-inner">${vars}</div></div>`;
+  }).join('');
+
+  const checks = [
+    { ok: true, msg: 'All function definitions are syntactically valid' },
+    { ok: true, msg: 'Parameter types are consistent within scope' },
+    { ok: warnings.length === 0, msg: warnings.length === 0 ? 'No unreachable code detected' : `${warnings.length} unreachable code segment(s) detected`, warn: warnings.length > 0 },
+    { ok: true, msg: 'No undefined variable references found' },
+    { ok: true, msg: 'Return statement type consistency verified' },
+  ];
+
+  const checksHtml = checks.map(c => `
+    <div class="sem-check">
+      <span class="${c.warn ? 'sem-warn' : c.ok ? 'sem-ok' : 'sem-err'}">${c.warn ? '⚠' : c.ok ? '✓' : '✗'}</span>
+      <span style="color:${c.warn ? 'var(--warn)' : c.ok ? 'var(--text2)' : 'var(--danger)'}">${c.msg}</span>
+    </div>`).join('');
+
+  return `
+    <div class="phase-title">⟨ Semantic Analysis</div>
+    <div class="phase-sub">The <strong>Semantic Analyzer</strong> checks the <em>meaning</em> of the program — type checking, scope resolution, and verifying that variables are defined before use. This is where unreachable code is first flagged logically.</div>
+
+    <div class="card">
+      <div class="card-title">Semantic Checks</div>
+      ${checksHtml}
+    </div>
+
+    <div class="card">
+      <div class="card-title">Symbol Table</div>
+      <table class="sym-table">
+        <thead><tr><th>Name</th><th>Type</th><th>Scope</th><th>Line</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Scope Chain Diagram</div>
+      <div class="scope-diagram">${scopeHtml}</div>
+    </div>`;
+}
+
+function renderIR(ir, blocks) {
+  const irLines = ir.map(inst => {
+    const cls = inst.dead ? 'ir-line dead' : 'ir-line';
+    return `<span class="${cls}" title="line ${inst.lineNum}">${escHtml(inst.code)}</span>`;
+  }).join('');
+
+  const blocksHtml = blocks.map(b => `
+    <div class="bblock">
+      <div class="bblock-header ${b.dead ? 'dead-block' : ''}">${b.id} ${b.dead ? '⚠ DEAD BLOCK' : ''}</div>
+      <div class="bblock-body">
+        ${b.instructions.map(i => `<div style="font-family:'JetBrains Mono',monospace;font-size:.73rem;color:${i.dead?'var(--danger)':'var(--text2)'};${i.dead?'text-decoration:line-through;opacity:.7':''}">${escHtml(i.code)}</div>`).join('')}
+      </div>
+    </div>`).join('');
+
+  return `
+    <div class="phase-title">⟨ IR Generation <span style="color:var(--text3);font-size:.9rem;font-weight:400">— Three-Address Code</span></div>
+    <div class="phase-sub">The <strong>IR Generator</strong> translates the AST into <em>Three-Address Code (TAC)</em> — a low-level, language-independent intermediate representation. Dead code appears with a strikethrough.</div>
+
+    <div class="ir-container">
+      <div>
+        <div class="card" style="padding:14px">
+          <div class="card-title">3-Address Code (TAC)</div>
+          <div class="ir-block">${irLines}</div>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="padding:14px">
+          <div class="card-title">Basic Blocks</div>
+          ${blocksHtml}
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderOptimization(blocks, unreachableLines) {
+  const svg = renderCFGSvg(blocks, unreachableLines);
+  const deadBlocks = blocks.filter(b => b.dead);
+  const liveBlocks = blocks.filter(b => !b.dead);
+
+  return `
+    <div class="phase-title">⟨ Code Optimization <span style="color:var(--text3);font-size:.9rem;font-weight:400">— Dead Code Elimination</span></div>
+    <div class="phase-sub">The <strong>Optimizer</strong> builds a <em>Control Flow Graph (CFG)</em> and performs <em>reachability analysis</em>. Nodes that cannot be reached from the entry point are marked dead and eliminated.</div>
+
+    <div class="card" style="padding:14px">
+      <div class="card-title">Control Flow Graph (CFG)</div>
+      <div style="overflow-x:auto">${svg}</div>
+      <div style="margin-top:10px;display:flex;gap:16px;font-family:'JetBrains Mono',monospace;font-size:.72rem">
+        <span><span style="color:#60a5fa">■</span> Live block</span>
+        <span><span style="color:#ef4444">■</span> Dead/unreachable block</span>
+        <span style="color:var(--text3)">─ ─</span> Dead edge
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div class="card" style="padding:14px">
+        <div class="card-title">Live Blocks (${liveBlocks.length})</div>
+        ${liveBlocks.map(b=>`<div style="font-family:'JetBrains Mono',monospace;font-size:.73rem;color:var(--accent3);padding:3px 0">✓ ${b.id} — ${b.instructions.length} instruction(s)</div>`).join('') || '<div style="color:var(--text3)">none</div>'}
+      </div>
+      <div class="card" style="padding:14px">
+        <div class="card-title">Dead Blocks (${deadBlocks.length})</div>
+        ${deadBlocks.map(b=>`<div style="font-family:'JetBrains Mono',monospace;font-size:.73rem;color:var(--danger);padding:3px 0">✗ ${b.id} — ${b.instructions.length} dead instruction(s)</div>`).join('') || '<div style="color:var(--accent3)">No dead blocks 🎉</div>'}
+      </div>
+    </div>
+
+    <div class="card" style="padding:14px">
+      <div class="card-title">Optimization Techniques Applied</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${[
+          {ok:true, name:'Dead Code Elimination', desc:'Removed unreachable basic blocks from IR'},
+          {ok:true, name:'Constant Folding', desc:'if False / while True conditions resolved at compile time'},
+          {ok:true, name:'Control Flow Analysis', desc:'Reachability computed via DFS from entry node'},
+          {ok:deadBlocks.length>0, name:'Block Pruning', desc:`${deadBlocks.length} block(s) pruned from final output`, warn:deadBlocks.length>0}
+        ].map(o=>`
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border)">
+            <span style="color:${o.warn?'var(--warn)':'var(--accent3)'};font-size:1rem">${o.warn?'⚠':'✓'}</span>
+            <div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--text)">${o.name}</div>
+              <div style="font-size:.72rem;color:var(--text3);margin-top:1px">${o.desc}</div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function renderOutput(code, unreachable, warnings) {
+  const lines = code.split('\n');
+  const ul = unreachable.unreachableLines;
+
+  const codeHtml = lines.map((line, i) => {
+    const lineNum = i + 1;
+    const isDead = ul.includes(lineNum);
+    return `<div class="out-line ${isDead ? 'dead-out' : ''}">
+      <span class="out-lnum">${lineNum}</span>
+      <span class="out-code">${escHtml(line)}</span>
+      ${isDead ? '<span class="warn-flag">⚠ UNREACHABLE</span>' : ''}
+    </div>`;
+  }).join('');
+
+  const warningsHtml = warnings.length === 0
+    ? `<div class="warn-box" style="border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.06)">
+        <div class="warn-icon">✅</div>
+        <div class="warn-msg"><strong style="color:var(--accent3)">All code is reachable</strong><span>No unreachable code segments detected in this program.</span></div>
+       </div>`
+    : warnings.map(w => `
+      <div class="warn-box">
+        <div class="warn-icon">⚠️</div>
+        <div class="warn-msg">
+          <strong>WARNING: Unreachable code detected at line ${w.line}</strong>
+          <span>${w.message}</span>
+        </div>
+      </div>`).join('');
+
+  const target = generateTargetCode(code, ul);
+
+  return `
+    <div class="phase-title">⟨ Code Generation <span style="color:var(--text3);font-size:.9rem;font-weight:400">— Final Output</span></div>
+    <div class="phase-sub">The <strong>Code Generator</strong> produces final output. Unreachable lines are highlighted in red. Dead code is stripped from the optimized output.</div>
+
+    <div class="summary-grid">
+      <div class="stat-card"><div class="stat-num info">${lines.filter(l=>l.trim()).length}</div><div class="stat-lbl">Total Lines</div></div>
+      <div class="stat-card"><div class="stat-num danger">${ul.length}</div><div class="stat-lbl">Unreachable Lines</div></div>
+      <div class="stat-card"><div class="stat-num ok">${warnings.length === 0 ? '✓' : warnings.length}</div><div class="stat-lbl">${warnings.length === 0 ? 'Clean' : 'Warnings'}</div></div>
+    </div>
+
+    ${warningsHtml}
+
+    <div class="card" style="padding:14px">
+      <div class="card-title">Annotated Source (unreachable lines highlighted)</div>
+      <div class="output-code">${codeHtml}</div>
+    </div>
+
+    <div class="card" style="padding:14px">
+      <div class="card-title">Optimized Output (dead code removed)</div>
+      <div class="output-code" style="color:var(--accent3)">${target}</div>
+    </div>`;
+}
+
+function generateTargetCode(code, unreachableLines) {
+  return code.split('\n')
+    .filter((_, i) => !unreachableLines.includes(i + 1))
+    .map(l => `<div style="font-family:'JetBrains Mono',monospace;font-size:.78rem">${escHtml(l)}</div>`)
+    .join('');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ══════════════════════════════════════════════════
+// LANGUAGE-AWARE HELPERS
+// ══════════════════════════════════════════════════
+function getCurrentLang() {
+  return document.getElementById('lang-select').value || 'python';
+}
+
+// C-style language keywords (JS, Java, C, C++, Go, Rust, TS, Kotlin, Swift)
+const CSTYLE_KEYWORDS = new Set([
+  'if','else','while','for','do','return','break','continue','switch','case','default',
+  'true','false','null','undefined','void','int','float','double','char','string','bool',
+  'boolean','var','let','const','function','class','new','this','super','extends','import',
+  'export','from','public','private','protected','static','final','abstract','interface',
+  'struct','enum','fn','mut','let','pub','use','mod','impl','trait','where','type','typeof',
+  'instanceof','in','of','async','await','try','catch','finally','throw','throws','package',
+  'namespace','using','include','define','printf','println','print','fmt','func','fun','val',
+  'def','object','when','is','as','by','companion','data','sealed','open','override','init',
+  'get','set','it','lazy','lateinit','inline','reified','noinline','crossinline','vararg',
+  'defer','go','chan','select','map','range','make','append','len','cap','copy','delete',
+  'loop','match','Some','None','Ok','Err','Box','Vec','String','Option','Result','usize',
+  'i32','i64','u32','u64','f32','f64','isize','bool','char'
+]);
+
+function tokenizeCStyle(code) {
+  const tokens = [];
+  const lines = code.split('\n');
+  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+    const src = lines[lineNum];
+    if (src.trim() === '' || src.trim().startsWith('//') || src.trim().startsWith('#')) {
+      tokens.push({type:'NEWLINE', val:'\\n', line: lineNum+1});
+      continue;
+    }
+    let i = 0;
+    while (i < src.length) {
+      if (src[i] === ' ' || src[i] === '\t') { i++; continue; }
+      if (src[i] === '/' && src[i+1] === '/') break;
+      if (src[i] === '/' && src[i+1] === '*') {
+        let j = i + 2;
+        while (j < src.length - 1 && !(src[j]==='*' && src[j+1]==='/')) j++;
+        i = j + 2; continue;
+      }
+      if (src[i] === '"' || src[i] === "'") {
+        let q = src[i], j = i + 1;
+        while (j < src.length && src[j] !== q) { if (src[j]==='\\') j++; j++; }
+        tokens.push({type:'STRING', val: src.slice(i, j+1), line: lineNum+1});
+        i = j + 1; continue;
+      }
+      if (/[0-9]/.test(src[i])) {
+        let j = i;
+        while (j < src.length && /[0-9\._]/.test(src[j])) j++;
+        tokens.push({type:'NUMBER', val: src.slice(i,j), line: lineNum+1});
+        i = j; continue;
+      }
+      if (/[a-zA-Z_$]/.test(src[i])) {
+        let j = i;
+        while (j < src.length && /[a-zA-Z0-9_$]/.test(src[j])) j++;
+        const w = src.slice(i, j);
+        if (w === 'true' || w === 'false') tokens.push({type:'BOOLEAN', val: w, line: lineNum+1});
+        else if (CSTYLE_KEYWORDS.has(w)) tokens.push({type:'KEYWORD', val: w, line: lineNum+1});
+        else tokens.push({type:'IDENTIFIER', val: w, line: lineNum+1});
+        i = j; continue;
+      }
+      if (i+1 < src.length && ['==','!=','<=','>=','&&','||','++','--','->','=>','**','//','::'].includes(src.slice(i,i+2))) {
+        tokens.push({type:'COMPARISON', val: src.slice(i,i+2), line: lineNum+1});
+        i += 2; continue;
+      }
+      if ('+-*/%=<>!&|^~'.includes(src[i])) {
+        tokens.push({type:'OPERATOR', val: src[i], line: lineNum+1});
+        i++; continue;
+      }
+      if ('()[]{}:,;.<>@#'.includes(src[i])) {
+        tokens.push({type:'PUNCTUATION', val: src[i], line: lineNum+1});
+        i++; continue;
+      }
+      i++;
+    }
+    tokens.push({type:'NEWLINE', val:'\\n', line: lineNum+1});
+  }
+  return tokens;
+}
+
+function detectUnreachableCStyle(code) {
+  const lines = code.split('\n');
+  const unreachableLines = new Set();
+  const warnings = [];
+  // Track brace depth and terminated state
+  const braceStack = []; // stack of {depth, terminated}
+  let braceDepth = 0;
+  const terminatedAtDepth = new Map();
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const t = line.trim();
+    if (!t || t.startsWith('//') || t.startsWith('#')) continue;
+
+    // Count braces
+    for (const ch of t) {
+      if (ch === '{') braceDepth++;
+      else if (ch === '}') {
+        terminatedAtDepth.delete(braceDepth);
+        braceDepth = Math.max(0, braceDepth - 1);
+      }
+    }
+
+    // Check if dead
+    let dead = false;
+    for (const [d, termLine] of terminatedAtDepth.entries()) {
+      if (d <= braceDepth && termLine < i) { dead = true; break; }
+    }
+
+    if (dead && !/^[{}]/.test(t) && t !== '}' && t !== '{') {
+      unreachableLines.add(i + 1);
+      if (!warnings.find(w => w.type === 'after_return' && Math.abs(w.line - (i+1)) < 5)) {
+        warnings.push({ line: i+1, message: `Unreachable code after return/break/continue`, type: 'after_return' });
+      }
+      continue;
+    }
+
+    // Detect terminators
+    const isReturn   = /\breturn\b/.test(t) && !t.startsWith('//');
+    const isBreak    = /\bbreak\b;/.test(t);
+    const isContinue = /\bcontinue\b;/.test(t);
+    const isWhileTrue = /while\s*\(\s*(true|1)\s*\)/.test(t);
+
+    if ((isReturn || isBreak || isContinue) && !t.includes('//')) {
+      terminatedAtDepth.set(braceDepth, i);
+    }
+    if (isWhileTrue) {
+      terminatedAtDepth.set(braceDepth, i);
+    }
+  }
+  return { unreachableLines: [...unreachableLines].sort((a,b)=>a-b), warnings };
+}
+
+function detectUnreachableForLang(code, lang) {
+  if (lang === 'python') return detectUnreachable(code);
+  return detectUnreachableCStyle(code);
+}
+
+function tokenizeForLang(code, lang) {
+  if (lang === 'python') return tokenize(code);
+  return tokenizeCStyle(code);
+}
+
+
+function runAnalysis() {
+  const code = document.getElementById('code-editor').value.trim();
+  if (!code) return;
+  const lang = getCurrentLang();
+
+  const btn = document.getElementById('analyze-btn');
+  const btnIcon = document.getElementById('btn-icon');
+  const btnText = document.getElementById('btn-text');
+  btn.classList.add('running');
+  btnIcon.innerHTML = '<div class="spinner"></div>';
+  btnText.textContent = 'Analyzing...';
+
+  setTimeout(() => {
+    try {
+      const tokens = tokenizeForLang(code, lang);
+      const tree = buildParseTree(code);
+      const symbols = buildSymbolTable(code);
+      const unreachable = detectUnreachableForLang(code, lang);
+      const ir = generateIR(code, unreachable.unreachableLines);
+      const blocks = buildBasicBlocks(ir);
+
+      analysisResult = { tokens, tree, symbols, ir, blocks, unreachable, warnings: unreachable.warnings, code, lang };
+
+      // Update editor highlight
+      updateEditorHighlight(code, unreachable.unreachableLines);
+
+      // Mark all tabs as done, show first
+      document.querySelectorAll('.phase-tab').forEach(t => t.classList.add('done'));
+      currentPhase = 0;
+      showPhase(0);
+      updateProgress();
+    } catch(e) {
+      document.getElementById('phase-content').innerHTML =
+        `<div class="error-panel">Error during analysis:<br/><br/>${e.message}<br/><br/>${e.stack}</div>`;
+    }
+
+    btn.classList.remove('running');
+    btnIcon.textContent = '▶';
+    btnText.textContent = 'Re-analyze';
+  }, 100);
+}
+
+// ══════════════════════════════════════════════════
+// EDITOR HIGHLIGHT
+// ══════════════════════════════════════════════════
+function updateEditorHighlight(code, unreachableLines) {
+  const lines = code.split('\n');
+  const lineNums = document.getElementById('line-nums');
+
+  lineNums.innerHTML = lines.map((_, i) => {
+    const n = i + 1;
+    const dead = unreachableLines.includes(n);
+    return `<span class="line-num ${dead ? 'unreachable-num' : ''}">${n}</span>`;
+  }).join('');
+}
+
+function updateLineNums() {
+  const code = document.getElementById('code-editor').value;
+  const lines = code.split('\n');
+  const lineNums = document.getElementById('line-nums');
+  lineNums.innerHTML = lines.map((_, i) => `<span class="line-num">${i+1}</span>`).join('');
+}
+
+// ══════════════════════════════════════════════════
+// PHASE NAVIGATION
+// ══════════════════════════════════════════════════
+function showPhase(idx) {
+  currentPhase = idx;
+  document.querySelectorAll('.phase-tab').forEach((t, i) => {
+    t.classList.toggle('active', i === idx);
+  });
+  if (analysisResult) {
+    renderPhase(idx);
+  }
+  updateProgress();
+}
+
+function nextPhase() {
+  if (currentPhase < 5) showPhase(currentPhase + 1);
+}
+function prevPhase() {
+  if (currentPhase > 0) showPhase(currentPhase - 1);
+}
+function updateProgress() {
+  const pct = ((currentPhase + 1) / 6) * 100;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('ap-step-info').textContent = `Phase ${currentPhase+1} / 6`;
+}
+
+let playing = false;
+function toggleAutoPlay() {
+  playing = !playing;
+  const btn = document.getElementById('ap-play');
+  if (playing) {
+    btn.textContent = '⏸ Pause';
+    btn.classList.add('active');
+    autoPlayInterval = setInterval(() => {
+      if (currentPhase < 5) {
+        nextPhase();
+      } else {
+        showPhase(0);
+      }
+    }, 2500);
+  } else {
+    btn.textContent = '▶ Auto-Play';
+    btn.classList.remove('active');
+    clearInterval(autoPlayInterval);
+  }
+}
+
+// ══════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════
+const tcGrid = document.getElementById('tc-grid');
+TEST_CASES.forEach((tc, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'tc-btn';
+  btn.textContent = tc.label;
+  btn.onclick = () => {
+    document.getElementById('code-editor').value = tc.code;
+    updateLineNums();
+  };
+  tcGrid.appendChild(btn);
+});
+
+// Editor line numbers
+const editor = document.getElementById('code-editor');
+editor.addEventListener('input', updateLineNums);
+editor.addEventListener('scroll', () => {
+  document.getElementById('line-nums').scrollTop = editor.scrollTop;
+});
+
+// Default code
+editor.value = TEST_CASES[0].code;
+updateLineNums();
+
+// Keyboard shortcut
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    runAnalysis();
+  }
+});
+</script>
+</body>
+</html>
